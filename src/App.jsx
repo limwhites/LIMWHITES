@@ -19,7 +19,8 @@ const STORAGE_KEY = 'lim_whites_vip_applications_v1';
 
 export default function App() {
   const isOwnerDesk =
-    typeof window !== 'undefined' && window.location.pathname === '/lw-concierge';
+    typeof window !== 'undefined' &&
+    window.location.pathname.replace(/\/+$/, '').endsWith('/lw-concierge');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSizes, setSelectedSizes] = useState(() =>

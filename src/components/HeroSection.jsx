@@ -7,7 +7,7 @@ export default function HeroSection({ onExplore, onOpenApply }) {
       {/* Background campaign image with dark editorial gradient mask */}
       <div className="absolute inset-0">
         <img
-          src="/images/hero-vault.jpg"
+          src={`${import.meta.env.BASE_URL}images/hero-vault.jpg`}
           alt="LIM WHITES x BAPE Vault Archive Collection"
           className="w-full h-full object-cover object-center opacity-70"
         />
