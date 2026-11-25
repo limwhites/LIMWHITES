@@ -9,6 +9,9 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  Settings,
 } from 'lucide-react';
 import { formatINR } from '../data/hoodies';
 import { OWNER_PIN_DEFAULT } from '../config/submission';
@@ -25,27 +28,42 @@ export default function OwnerDesk() {
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState('');
 
-  const fetchApplications = async (pin) => {
+  const [upiId, setUpiId] = useState('');
+  const [merchantName, setMerchantName] = useState('LIM WHITES');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
+
+  const fetchAll = async (pin) => {
     setLoading(true);
     setAuthError('');
     try {
-      const res = await fetch('/api/applications', {
-        headers: { 'x-owner-pin': pin },
-      });
-      if (res.status === 401) {
+      const [appsRes, setRes] = await Promise.all([
+        fetch('/api/applications', { headers: { 'x-owner-pin': pin } }),
+        fetch('/api/settings', { headers: { 'x-owner-pin': pin } }),
+      ]);
+
+      if (appsRes.status === 401) {
         setAuthError('Invalid Owner Passcode.');
         setLoading(false);
         return false;
       }
-      if (res.ok) {
-        const data = await res.json();
-        setApplications(data.applications || []);
-        setUnlockedPin(pin);
-        setLoading(false);
-        return true;
+
+      if (appsRes.ok) {
+        const appsData = await appsRes.json();
+        setApplications(appsData.applications || []);
       }
+      if (setRes.ok) {
+        const setData = await setRes.json();
+        if (setData.settings) {
+          setUpiId(setData.settings.upiId || '');
+          setMerchantName(setData.settings.merchantName || 'LIM WHITES');
+        }
+      }
+      setUnlockedPin(pin);
+      setLoading(false);
+      return true;
     } catch {
-      // Static fallback when no backend API is running
+      // Static fallback
     }
 
     if (pin === OWNER_PIN_DEFAULT) {
@@ -66,14 +84,64 @@ export default function OwnerDesk() {
   };
 
   useEffect(() => {
-    if (unlockedPin) {
-      fetchApplications(unlockedPin);
-    }
+    if (unlockedPin) fetchAll(unlockedPin);
   }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    await fetchApplications(pinInput.trim());
+    await fetchAll(pinInput.trim());
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    setSettingsSavedMsg('');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-owner-pin': unlockedPin,
+        },
+        body: JSON.stringify({ upiId: upiId.trim(), merchantName: merchantName.trim() }),
+      });
+      if (res.ok) {
+        setSettingsSavedMsg('Saved! Customers now see this ₹3,000 UPI QR code on checkout.');
+        setTimeout(() => setSettingsSavedMsg(''), 4000);
+      }
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleApproveUtr = async (applicationId) => {
+    try {
+      const res = await fetch(`/api/applications/${encodeURIComponent(applicationId)}/approve`, {
+        method: 'POST',
+        headers: { 'x-owner-pin': unlockedPin },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.applications) setApplications(data.applications);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRejectUtr = async (applicationId) => {
+    try {
+      const res = await fetch(`/api/applications/${encodeURIComponent(applicationId)}/reject`, {
+        method: 'POST',
+        headers: { 'x-owner-pin': unlockedPin },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.applications) setApplications(data.applications);
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handleStatusChange = async (applicationId, nextStatus) => {
@@ -90,7 +158,7 @@ export default function OwnerDesk() {
         body: JSON.stringify({ status: nextStatus }),
       });
     } catch {
-      // Ignore if running statically
+      // Ignore
     }
   };
 
@@ -102,8 +170,7 @@ export default function OwnerDesk() {
   };
 
   const handleCopyDm = (app, mode) => {
-    const text = buildOutreachText(app, mode);
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(buildOutreachText(app, mode));
     setCopiedId(`${app.applicationId}-${mode}`);
     setTimeout(() => setCopiedId(''), 2000);
   };
@@ -111,7 +178,10 @@ export default function OwnerDesk() {
   const exportCsv = () => {
     const headers = [
       'Application ID',
-      'Status',
+      'Payment Status',
+      'UTR Number',
+      'VIP Status',
+      'SMS Status',
       'Full Name',
       'Email',
       'Phone',
@@ -120,8 +190,7 @@ export default function OwnerDesk() {
       'Hoodie Name',
       'Size',
       'Valuation INR',
-      'Fee Paid INR',
-      'Payment Ref',
+      'Fee INR',
       'Address',
       'City',
       'State',
@@ -131,7 +200,10 @@ export default function OwnerDesk() {
     const rows = applications.map((a) =>
       [
         a.applicationId,
+        a.paymentStatus || 'PAID',
+        a.utrNumber || a.paymentReference || '',
         a.status || 'Pending',
+        a.smsStatus || '',
         a.fullName,
         a.email,
         `+91 ${a.phone}`,
@@ -141,7 +213,6 @@ export default function OwnerDesk() {
         a.size,
         a.sizeValuation,
         a.feePaid,
-        a.paymentReference || a.paymentMethodLabel,
         a.address,
         a.city,
         a.state,
@@ -165,12 +236,17 @@ export default function OwnerDesk() {
     const q = search.trim().toLowerCase();
     return applications.filter((a) => {
       const st = a.status || 'Pending';
-      const statusOk = filterStatus === 'ALL' || st === filterStatus;
+      const statusOk =
+        filterStatus === 'ALL' ||
+        (filterStatus === 'Awaiting UTR Verification'
+          ? a.paymentStatus === 'UTR_SUBMITTED'
+          : st === filterStatus);
       const queryOk =
         !q ||
         (a.fullName || '').toLowerCase().includes(q) ||
         (a.email || '').toLowerCase().includes(q) ||
         (a.phone || '').includes(q) ||
+        (a.utrNumber || '').includes(q) ||
         (a.applicationId || '').toLowerCase().includes(q) ||
         (a.city || '').toLowerCase().includes(q);
       return statusOk && queryOk;
@@ -190,8 +266,8 @@ export default function OwnerDesk() {
           </div>
           <h1 className="font-display text-4xl font-extrabold uppercase">OWNER ACCESS</h1>
           <p className="text-xs text-zinc-600 leading-relaxed">
-            This private portal is unlinked from the public storefront. Enter your Owner Passcode
-            to review VIP applicants, mark allotments, and send Email or DM updates.
+            Private portal to configure your ₹3,000 UPI ID, verify customer UTR payments, trigger
+            confirmation SMS, and send Allotted / Not Selected emails or DMs.
           </p>
           <div>
             <label
@@ -205,7 +281,7 @@ export default function OwnerDesk() {
               type="password"
               value={pinInput}
               onChange={(e) => setPinInput(e.target.value)}
-              placeholder="Enter passcode"
+              placeholder="Enter passcode (default: LIMWHITES2026)"
               className="w-full h-11 px-3.5 border border-black text-sm focus:outline-none"
             />
             {authError && <p className="text-xs text-red-600 mt-1.5 font-semibold">{authError}</p>}
@@ -224,9 +300,9 @@ export default function OwnerDesk() {
   }
 
   const totalCount = applications.length;
-  const pendingCount = applications.filter((a) => (a.status || 'Pending') === 'Pending').length;
+  const utrPendingCount = applications.filter((a) => a.paymentStatus === 'UTR_SUBMITTED').length;
+  const paidCount = applications.filter((a) => a.paymentStatus === 'PAID').length;
   const allottedCount = applications.filter((a) => a.status === 'Allotted').length;
-  const notSelectedCount = applications.filter((a) => a.status === 'Not Selected').length;
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-black">
@@ -237,13 +313,13 @@ export default function OwnerDesk() {
               LIM WHITES • PRIVATE OWNER DESK
             </div>
             <h1 className="font-display text-3xl font-extrabold uppercase">
-              VIP APPLICANTS &amp; ALLOTMENT REGISTRY
+              UTR VERIFICATION, LEADS &amp; ALLOTMENT DESK
             </h1>
           </div>
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => fetchApplications(unlockedPin)}
+              onClick={() => fetchAll(unlockedPin)}
               className="px-4 py-2.5 border border-white/30 text-xs font-mono uppercase hover:bg-white hover:text-black transition-colors flex items-center gap-2 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -268,26 +344,85 @@ export default function OwnerDesk() {
       </header>
 
       <main className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+        {/* Merchant UPI QR Configuration Box */}
+        <form
+          onSubmit={handleSaveSettings}
+          className="bg-white border-2 border-black p-5 space-y-4"
+        >
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider">
+              <Settings className="w-4 h-4" />
+              MERCHANT PHONEPE / UPI QR SETTINGS (SHOWN TO CUSTOMERS ON CHECKOUT)
+            </div>
+            {settingsSavedMsg && (
+              <span className="text-xs font-mono font-bold text-emerald-700">
+                {settingsSavedMsg}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-5">
+              <label htmlFor="desk-upi" className="block font-mono text-[11px] font-bold uppercase mb-1">
+                Your PhonePe / Business UPI ID
+              </label>
+              <input
+                id="desk-upi"
+                type="text"
+                value={upiId}
+                onChange={(e) => setUpiId(e.target.value)}
+                placeholder="e.g. yourname@ybl or business@okaxis"
+                className="w-full h-10 px-3 border border-black/30 focus:border-black font-mono text-xs focus:outline-none"
+              />
+            </div>
+            <div className="sm:col-span-4">
+              <label htmlFor="desk-mname" className="block font-mono text-[11px] font-bold uppercase mb-1">
+                Display Name on UPI
+              </label>
+              <input
+                id="desk-mname"
+                type="text"
+                value={merchantName}
+                onChange={(e) => setMerchantName(e.target.value)}
+                placeholder="LIM WHITES"
+                className="w-full h-10 px-3 border border-black/30 focus:border-black text-xs font-bold focus:outline-none"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <button
+                type="submit"
+                disabled={savingSettings}
+                className="w-full h-10 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-zinc-800 cursor-pointer"
+              >
+                {savingSettings ? 'SAVING...' : 'SAVE UPI SETTINGS'}
+              </button>
+            </div>
+          </div>
+        </form>
+
         {/* Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white border border-black/15 p-4">
-            <div className="font-mono text-[11px] text-zinc-500 uppercase">TOTAL APPLICATIONS</div>
+            <div className="font-mono text-[11px] text-zinc-500 uppercase">TOTAL SUBMISSIONS</div>
             <div className="font-display text-4xl font-extrabold mt-1">{totalCount}</div>
           </div>
-          <div className="bg-white border border-black/15 p-4">
-            <div className="font-mono text-[11px] text-zinc-500 uppercase">PENDING REVIEW</div>
-            <div className="font-display text-4xl font-extrabold mt-1">{pendingCount}</div>
-          </div>
-          <div className="bg-white border border-black/15 p-4">
-            <div className="font-mono text-[11px] text-emerald-700 uppercase">VIP ALLOTTED</div>
-            <div className="font-display text-4xl font-extrabold text-emerald-700 mt-1">
-              {allottedCount}
+          <div className="bg-amber-50 border border-amber-300 p-4">
+            <div className="font-mono text-[11px] text-amber-800 uppercase font-bold">
+              AWAITING UTR CHECK
+            </div>
+            <div className="font-display text-4xl font-extrabold text-amber-800 mt-1">
+              {utrPendingCount}
             </div>
           </div>
           <div className="bg-white border border-black/15 p-4">
-            <div className="font-mono text-[11px] text-zinc-500 uppercase">NOT SELECTED</div>
-            <div className="font-display text-4xl font-extrabold text-zinc-700 mt-1">
-              {notSelectedCount}
+            <div className="font-mono text-[11px] text-emerald-700 uppercase">VERIFIED PAID</div>
+            <div className="font-display text-4xl font-extrabold text-emerald-700 mt-1">
+              {paidCount}
+            </div>
+          </div>
+          <div className="bg-white border border-black/15 p-4">
+            <div className="font-mono text-[11px] text-zinc-500 uppercase">VIP ALLOTTED</div>
+            <div className="font-display text-4xl font-extrabold text-black mt-1">
+              {allottedCount}
             </div>
           </div>
         </div>
@@ -295,20 +430,22 @@ export default function OwnerDesk() {
         {/* Search & Filter */}
         <div className="bg-white border border-black/15 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-wrap gap-2">
-            {['ALL', 'Pending', 'Allotted', 'Not Selected'].map((st) => (
-              <button
-                key={st}
-                type="button"
-                onClick={() => setFilterStatus(st)}
-                className={`px-3.5 py-2 text-xs font-mono font-bold uppercase border cursor-pointer ${
-                  filterStatus === st
-                    ? 'bg-black text-white border-black'
-                    : 'bg-white text-black border-black/20'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
+            {['ALL', 'Awaiting UTR Verification', 'Pending', 'Allotted', 'Not Selected'].map(
+              (st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setFilterStatus(st)}
+                  className={`px-3.5 py-2 text-xs font-mono font-bold uppercase border cursor-pointer ${
+                    filterStatus === st
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-black border-black/20'
+                  }`}
+                >
+                  {st}
+                </button>
+              )
+            )}
           </div>
           <div className="flex items-center bg-[#ECEFF1] px-3 h-10 w-full md:w-80">
             <Search className="w-4 h-4 text-zinc-600" />
@@ -316,7 +453,7 @@ export default function OwnerDesk() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, email, city, phone, ID..."
+              placeholder="Search name, UTR, email, city, phone..."
               className="w-full bg-transparent pl-2 text-xs focus:outline-none"
             />
           </div>
@@ -325,15 +462,17 @@ export default function OwnerDesk() {
         {/* Applications List */}
         {filtered.length === 0 ? (
           <div className="bg-white border border-black/15 p-10 text-center">
-            <p className="font-display text-2xl font-bold uppercase">NO SUBMISSIONS YET</p>
+            <p className="font-display text-2xl font-bold uppercase">NO SUBMISSIONS FOUND</p>
             <p className="text-xs text-zinc-600 mt-1">
-              Customer VIP applications submitted on the storefront appear here automatically.
+              Customer VIP applications and 12-digit UTR entries appear here automatically.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
             {filtered.map((app) => {
               const status = app.status || 'Pending';
+              const isUtrSubmitted = app.paymentStatus === 'UTR_SUBMITTED';
+              const isPaid = app.paymentStatus === 'PAID';
               const mailSubject =
                 status === 'Allotted'
                   ? `LIM WHITES VIP Access ALLOTTED — ${app.applicationId}`
@@ -345,7 +484,12 @@ export default function OwnerDesk() {
               const waText = encodeURIComponent(mailBody);
 
               return (
-                <div key={app.applicationId} className="bg-white border border-black/20 p-5 space-y-4">
+                <div
+                  key={app.applicationId}
+                  className={`bg-white border p-5 space-y-4 ${
+                    isUtrSubmitted ? 'border-2 border-amber-500' : 'border-black/20'
+                  }`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/10 pb-3">
                     <div>
                       <div className="font-mono text-xs text-[#B48A3E] font-bold">
@@ -360,26 +504,48 @@ export default function OwnerDesk() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {['Pending', 'Allotted', 'Not Selected'].map((opt) => (
+                    {/* UTR Approve / Reject OR Allotment Status Switcher */}
+                    {isUtrSubmitted ? (
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
-                          key={opt}
                           type="button"
-                          onClick={() => handleStatusChange(app.applicationId, opt)}
-                          className={`px-3 py-1.5 text-[11px] font-mono font-bold uppercase border cursor-pointer ${
-                            status === opt
-                              ? opt === 'Allotted'
-                                ? 'bg-emerald-700 text-white border-emerald-700'
-                                : opt === 'Not Selected'
-                                ? 'bg-zinc-800 text-white border-zinc-800'
-                                : 'bg-black text-white border-black'
-                              : 'bg-white text-zinc-600 border-black/20 hover:border-black'
-                          }`}
+                          onClick={() => handleApproveUtr(app.applicationId)}
+                          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-mono font-bold uppercase flex items-center gap-1.5 cursor-pointer"
                         >
-                          {opt}
+                          <CheckCircle2 className="w-4 h-4" />
+                          APPROVE ₹3,000 &amp; SEND SMS
                         </button>
-                      ))}
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectUtr(app.applicationId)}
+                          className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-mono font-bold uppercase flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          REJECT (UNPAID)
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {['Pending', 'Allotted', 'Not Selected'].map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => handleStatusChange(app.applicationId, opt)}
+                            className={`px-3 py-1.5 text-[11px] font-mono font-bold uppercase border cursor-pointer ${
+                              status === opt
+                                ? opt === 'Allotted'
+                                  ? 'bg-emerald-700 text-white border-emerald-700'
+                                  : opt === 'Not Selected'
+                                  ? 'bg-zinc-800 text-white border-zinc-800'
+                                  : 'bg-black text-white border-black'
+                                : 'bg-white text-zinc-600 border-black/20 hover:border-black'
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
@@ -394,19 +560,25 @@ export default function OwnerDesk() {
                     </div>
                     <div className="bg-[#F5F5F5] p-3 border border-black/10">
                       <div className="font-mono text-[10px] text-zinc-500 uppercase">
-                        ₹3,000 PHONEPE &amp; SMS STATUS
+                        ₹3,000 UTR &amp; SMS STATUS
                       </div>
                       <div
                         className={`font-bold mt-1 ${
-                          app.paymentStatus === 'PAID' ? 'text-emerald-700' : 'text-red-600'
+                          isPaid
+                            ? 'text-emerald-700'
+                            : isUtrSubmitted
+                            ? 'text-amber-700'
+                            : 'text-red-600'
                         }`}
                       >
-                        {app.paymentStatus === 'PAID'
-                          ? `${formatINR(app.feePaid)} PAID & VERIFIED`
+                        {isPaid
+                          ? '₹3,000 PAID & VERIFIED'
+                          : isUtrSubmitted
+                          ? `VERIFY UTR: ${app.utrNumber}`
                           : app.paymentStatus || 'UNPAID'}
                       </div>
                       <div className="font-mono text-zinc-700 mt-0.5">
-                        {app.paymentReference || app.merchantTransactionId || app.paymentMethodLabel}
+                        UTR / Ref: {app.utrNumber || app.paymentReference || '-'}
                       </div>
                       <div className="font-mono text-[10px] text-zinc-500 mt-0.5">
                         SMS: {app.smsStatus || 'pending'}
@@ -422,7 +594,6 @@ export default function OwnerDesk() {
                     </div>
                   </div>
 
-                  {/* Direct 1-click Email / WhatsApp / IG DM Outreach */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <a
                       href={`mailto:${app.email}?subject=${encodeURIComponent(

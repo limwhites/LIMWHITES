@@ -12,23 +12,51 @@ export default function Footer({
   const [lookupId, setLookupId] = useState('');
   const [lookupMsg, setLookupMsg] = useState('');
 
-  const handleLookup = (e) => {
+  const handleLookup = async (e) => {
     e.preventDefault();
     const query = lookupId.trim().toLowerCase();
     if (!query) {
       setLookupMsg('Enter your Application ID (e.g. LW-VIP-2026-...) or email address.');
       return;
     }
-    const found = passes.find(
+
+    // First check server for live approval status
+    try {
+      const res = await fetch(`/api/pass-lookup?q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const found = data.application;
+        if (found) {
+          if (found.paymentStatus === 'PAID') {
+            setLookupMsg('');
+            onLookupPass(found);
+            return;
+          }
+          if (found.paymentStatus === 'UTR_SUBMITTED') {
+            setLookupMsg(
+              `UTR ${found.utrNumber} is currently under payment verification. Once approved, your Digital Card unlocks here.`
+            );
+            return;
+          }
+          setLookupMsg('Payment for this entry could not be verified.');
+          return;
+        }
+      }
+    } catch {
+      // Fallback to locally stored verified passes
+    }
+
+    const foundLocal = passes.find(
       (p) =>
-        p.applicationId.toLowerCase() === query || p.email.toLowerCase() === query
+        (p.paymentStatus === 'PAID' || !p.paymentStatus) &&
+        (p.applicationId.toLowerCase() === query || p.email.toLowerCase() === query)
     );
-    if (found) {
+    if (foundLocal) {
       setLookupMsg('');
-      onLookupPass(found);
+      onLookupPass(foundLocal);
     } else {
       setLookupMsg(
-        'No VIP Pass found for that Application ID or Email. Please double-check or apply for VIP Access.'
+        'No verified VIP Pass found for that ID or Email. Please ensure your ₹3,000 UTR is verified.'
       );
     }
   };

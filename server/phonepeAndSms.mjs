@@ -4,8 +4,8 @@ import crypto from 'node:crypto';
 
 const DATA_DIR = path.resolve(process.cwd(), 'server-data');
 const DATA_FILE = path.join(DATA_DIR, 'applications.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
-// Load .env manually when running without Vite or via dotenv-less Node
 export function loadEnvFile() {
   const envPath = path.resolve(process.cwd(), '.env');
   if (!fs.existsSync(envPath)) return;
@@ -37,22 +37,51 @@ export function writeApplications(list) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(list, null, 2), 'utf-8');
 }
 
+export function readSettings() {
+  loadEnvFile();
+  let fileSettings = {};
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      fileSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    }
+  } catch {
+    fileSettings = {};
+  }
+  return {
+    upiId:
+      fileSettings.upiId ||
+      (process.env.MERCHANT_UPI_ID || process.env.VITE_MERCHANT_UPI_ID || '9555838550@ptsbi').trim(),
+    merchantName:
+      fileSettings.merchantName ||
+      (process.env.MERCHANT_UPI_NAME || 'LIM WHITES').trim(),
+  };
+}
+
+export function writeSettings(next) {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  const current = readSettings();
+  const merged = {
+    upiId: String(next.upiId ?? current.upiId).trim(),
+    merchantName: String(next.merchantName ?? current.merchantName).trim() || 'LIM WHITES',
+  };
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+  return merged;
+}
+
 export function getOwnerPin() {
   loadEnvFile();
   return process.env.VITE_OWNER_PIN || process.env.OWNER_PIN || 'LIMWHITES2026';
 }
 
-function getPhonePeConfig() {
+export function getPhonePeConfig() {
   loadEnvFile();
   const envMode = (process.env.PHONEPE_ENV || 'SANDBOX').toUpperCase();
   const isProd = envMode === 'PROD' || envMode === 'PRODUCTION';
 
-  // V2 OAuth credentials
   const clientId = (process.env.PHONEPE_CLIENT_ID || '').trim();
   const clientSecret = (process.env.PHONEPE_CLIENT_SECRET || '').trim();
   const clientVersion = (process.env.PHONEPE_CLIENT_VERSION || '1').trim();
 
-  // V1 SHA256 credentials
   const merchantId = (process.env.PHONEPE_MERCHANT_ID || '').trim();
   const saltKey = (process.env.PHONEPE_SALT_KEY || '').trim();
   const saltIndex = (process.env.PHONEPE_SALT_INDEX || '1').trim();
@@ -63,7 +92,6 @@ function getPhonePeConfig() {
   const v2AuthUrl = isProd
     ? 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token'
     : 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token';
-
   const v1BaseUrl = isProd
     ? 'https://api.phonepe.com/apis/hermes'
     : 'https://api-preprod.phonepe.com/apis/pg-sandbox';
@@ -116,7 +144,7 @@ export async function initiatePhonePePayment(applicantData, origin) {
   const cfg = getPhonePeConfig();
   if (cfg.mode === 'UNCONFIGURED') {
     const err = new Error(
-      'PhonePe Payment Gateway credentials are not configured yet. Set PHONEPE_CLIENT_ID & PHONEPE_CLIENT_SECRET (or PHONEPE_MERCHANT_ID & PHONEPE_SALT_KEY) in your .env file.'
+      'PhonePe PG API keys are not active yet. Please use the PhonePe UPI QR + 12-Digit UTR option.'
     );
     err.statusCode = 503;
     throw err;
@@ -124,7 +152,7 @@ export async function initiatePhonePePayment(applicantData, origin) {
 
   const merchantTransactionId = `LWVIP${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
   const applicationId = `LW-VIP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-  const amountPaise = 300000; // ₹3,000.00 strictly locked server-side
+  const amountPaise = 300000;
   const redirectUrl = `${origin}/?phonepe_txn=${encodeURIComponent(merchantTransactionId)}`;
   const callbackUrl = `${origin}/api/phonepe/callback`;
 
@@ -139,9 +167,7 @@ export async function initiatePhonePePayment(applicantData, origin) {
       paymentFlow: {
         type: 'PG_CHECKOUT',
         message: 'LIM WHITES VIP Early Access Fee (Rs. 3,000)',
-        merchantUrls: {
-          redirectUrl,
-        },
+        merchantUrls: { redirectUrl },
       },
       metaInfo: {
         udf1: applicationId,
@@ -166,7 +192,6 @@ export async function initiatePhonePePayment(applicantData, origin) {
     }
     gatewayRedirectUrl = data.redirectUrl;
   } else {
-    // V1 SHA256 /pg/v1/pay
     const payload = {
       merchantId: cfg.merchantId,
       merchantTransactionId,
@@ -176,9 +201,7 @@ export async function initiatePhonePePayment(applicantData, origin) {
       redirectMode: 'REDIRECT',
       callbackUrl,
       mobileNumber: applicantData.phone,
-      paymentInstrument: {
-        type: 'PAY_PAGE',
-      },
+      paymentInstrument: { type: 'PAY_PAGE' },
     };
     const base64Payload = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64');
     const checksum =
@@ -204,12 +227,12 @@ export async function initiatePhonePePayment(applicantData, origin) {
     gatewayRedirectUrl = url;
   }
 
-  // Persist PENDING_PAYMENT record — NEVER marked PAID until server verifies with PhonePe Status API
   const now = new Date();
   const pendingRecord = {
     applicationId,
     merchantTransactionId,
     phonepeTransactionId: '',
+    utrNumber: '',
     paymentStatus: 'PENDING_PAYMENT',
     status: 'Awaiting Payment',
     smsStatus: 'pending',
@@ -243,11 +266,70 @@ export async function initiatePhonePePayment(applicantData, origin) {
   const list = readApplications();
   writeApplications([pendingRecord, ...list]);
 
-  return {
-    redirectUrl: gatewayRedirectUrl,
-    merchantTransactionId,
+  return { redirectUrl: gatewayRedirectUrl, merchantTransactionId, applicationId };
+}
+
+export async function submitUtrApplication(applicantData) {
+  const utr = String(applicantData.utrNumber || '').replace(/\s+/g, '');
+  if (!/^\d{12}$/.test(utr)) {
+    const err = new Error('Please enter a valid 12-digit UTR / UPI Transaction Reference Number.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const list = readApplications();
+  const duplicate = list.find(
+    (item) => item.utrNumber === utr && item.paymentStatus !== 'REJECTED'
+  );
+  if (duplicate) {
+    const err = new Error(
+      `This 12-digit UTR (${utr}) has already been submitted under application ${duplicate.applicationId}.`
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const applicationId = `LW-VIP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+  const now = new Date();
+  const record = {
     applicationId,
+    merchantTransactionId: `UTR_${utr}`,
+    phonepeTransactionId: utr,
+    paymentReference: utr,
+    utrNumber: utr,
+    paymentStatus: 'UTR_SUBMITTED',
+    status: 'Awaiting UTR Verification',
+    smsStatus: 'waiting_utr_approval',
+    hoodieId: applicantData.hoodieId,
+    hoodieName: applicantData.hoodieName,
+    hoodieSku: applicantData.hoodieSku,
+    hoodieImage: applicantData.hoodieImage,
+    colorway: applicantData.colorway,
+    stock: applicantData.stock,
+    size: applicantData.size,
+    sizeValuation: applicantData.sizeValuation,
+    feePaid: 3000,
+    fullName: applicantData.fullName,
+    email: applicantData.email,
+    phone: applicantData.phone,
+    instagram: applicantData.instagram || '',
+    collectorTier: applicantData.collectorTier,
+    address: applicantData.address,
+    city: applicantData.city,
+    state: applicantData.state,
+    pincode: applicantData.pincode,
+    paymentMethodLabel: `UPI UTR (${utr})`,
+    acceptedNonRefundableTerms: true,
+    submittedAtIso: now.toISOString(),
+    submittedAtFormatted: now.toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }),
   };
+
+  writeApplications([record, ...list]);
+  await forwardToWebhook(record);
+  return record;
 }
 
 export async function sendCustomerConfirmationSms(record) {
@@ -257,9 +339,8 @@ export async function sendCustomerConfirmationSms(record) {
     return { status: 'invalid_phone' };
   }
 
-  const smsText = `LIM WHITES: Thank you ${record.fullName}! Your VIP Early Access application (${record.applicationId}) for ${record.hoodieSku} Size ${record.size} is confirmed after Rs.3,000 PhonePe payment. Please wait, our team will contact you soon.`;
+  const smsText = `LIM WHITES: Thank you ${record.fullName}! Your VIP Early Access application (${record.applicationId}) for ${record.hoodieSku} Size ${record.size} is confirmed after Rs.3,000 payment. Please wait, our team will contact you soon.`;
 
-  // 1. Fast2SMS (India transactional / quick SMS)
   const fast2smsKey = (process.env.FAST2SMS_API_KEY || '').trim();
   if (fast2smsKey) {
     try {
@@ -298,7 +379,6 @@ export async function sendCustomerConfirmationSms(record) {
     }
   }
 
-  // 2. Twilio SMS
   const twilioSid = (process.env.TWILIO_ACCOUNT_SID || '').trim();
   const twilioToken = (process.env.TWILIO_AUTH_TOKEN || '').trim();
   const twilioFrom = (process.env.TWILIO_FROM_NUMBER || '').trim();
@@ -331,7 +411,6 @@ export async function sendCustomerConfirmationSms(record) {
     }
   }
 
-  // 3. MSG91 Flow API
   const msg91Key = (process.env.MSG91_AUTH_KEY || '').trim();
   const msg91Template = (process.env.MSG91_TEMPLATE_ID || '').trim();
   if (msg91Key && msg91Template) {
@@ -381,8 +460,62 @@ async function forwardToWebhook(record) {
       body: JSON.stringify(record),
     });
   } catch {
-    // Ignore webhook network errors
+    // Ignore webhook errors
   }
+}
+
+export async function approveUtrPayment(applicationId) {
+  const list = readApplications();
+  const target = list.find((a) => a.applicationId === applicationId);
+  if (!target) {
+    const err = new Error('Application not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  const smsRes = await sendCustomerConfirmationSms(target);
+  const updated = {
+    ...target,
+    paymentStatus: 'PAID',
+    status: target.status === 'Allotted' ? 'Allotted' : 'Pending',
+    paymentMethodLabel: target.utrNumber
+      ? `PHONEPE UPI VERIFIED (UTR ${target.utrNumber})`
+      : target.paymentMethodLabel,
+    smsStatus: smsRes.status,
+    verifiedAtIso: new Date().toISOString(),
+  };
+  const nextList = list.map((a) => (a.applicationId === applicationId ? updated : a));
+  writeApplications(nextList);
+  await forwardToWebhook(updated);
+  return { application: updated, applications: nextList };
+}
+
+export function rejectUtrPayment(applicationId) {
+  const list = readApplications();
+  const nextList = list.map((a) =>
+    a.applicationId === applicationId
+      ? {
+          ...a,
+          paymentStatus: 'REJECTED',
+          status: 'Payment Rejected',
+          smsStatus: 'not_sent_unpaid',
+        }
+      : a
+  );
+  writeApplications(nextList);
+  return nextList;
+}
+
+export function lookupPublicPass(query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return null;
+  const list = readApplications();
+  const found = list.find(
+    (p) =>
+      String(p.applicationId || '').toLowerCase() === q ||
+      String(p.email || '').toLowerCase() === q ||
+      String(p.utrNumber || '').toLowerCase() === q
+  );
+  return found || null;
 }
 
 export async function verifyPhonePePayment(merchantTransactionId) {
@@ -401,7 +534,6 @@ export async function verifyPhonePePayment(merchantTransactionId) {
     throw err;
   }
 
-  // If already verified PAID earlier, return immediately without re-sending SMS
   if (existing.paymentStatus === 'PAID') {
     return { verified: true, state: 'COMPLETED', application: existing };
   }
@@ -478,7 +610,6 @@ export async function verifyPhonePePayment(merchantTransactionId) {
     return { verified: true, state: 'COMPLETED', application: updatedRecord };
   }
 
-  // Strictly refuse Digital Thank You Card if payment was NOT completed
   const failedStatus = gatewayState === 'PENDING' ? 'PENDING_PAYMENT' : 'FAILED';
   const updatedFail = {
     ...existing,

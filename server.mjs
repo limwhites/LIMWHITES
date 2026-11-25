@@ -2,12 +2,19 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  approveUtrPayment,
   getOwnerPin,
+  getPhonePeConfig,
   initiatePhonePePayment,
   loadEnvFile,
+  lookupPublicPass,
   readApplications,
+  readSettings,
+  rejectUtrPayment,
+  submitUtrApplication,
   verifyPhonePePayment,
   writeApplications,
+  writeSettings,
 } from './server/phonepeAndSms.mjs';
 
 loadEnvFile();
@@ -52,6 +59,40 @@ const server = http.createServer(async (req, res) => {
   const fullUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const urlPath = fullUrl.pathname;
 
+  if (urlPath === '/api/public-config' && req.method === 'GET') {
+    const settings = readSettings();
+    const pg = getPhonePeConfig();
+    sendJson(res, 200, {
+      ok: true,
+      upiId: settings.upiId,
+      merchantName: settings.merchantName,
+      hasPhonePePg: pg.mode !== 'UNCONFIGURED',
+    });
+    return;
+  }
+
+  if (urlPath === '/api/upi/submit' && req.method === 'POST') {
+    try {
+      const payload = await readJsonBody(req);
+      const record = await submitUtrApplication(payload);
+      sendJson(res, 201, { ok: true, application: record });
+    } catch (err) {
+      sendJson(res, err.statusCode || 500, { ok: false, error: err.message });
+    }
+    return;
+  }
+
+  if (urlPath === '/api/pass-lookup' && req.method === 'GET') {
+    const q = fullUrl.searchParams.get('q') || '';
+    const found = lookupPublicPass(q);
+    if (!found) {
+      sendJson(res, 404, { ok: false, error: 'Pass not found' });
+      return;
+    }
+    sendJson(res, 200, { ok: true, application: found });
+    return;
+  }
+
   if (urlPath === '/api/phonepe/initiate' && req.method === 'POST') {
     try {
       const payload = await readJsonBody(req);
@@ -86,6 +127,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (urlPath === '/api/settings') {
+    if (req.headers['x-owner-pin'] !== getOwnerPin()) {
+      sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+      return;
+    }
+    if (req.method === 'GET') {
+      sendJson(res, 200, { ok: true, settings: readSettings() });
+      return;
+    }
+    if (req.method === 'POST') {
+      const payload = await readJsonBody(req);
+      sendJson(res, 200, { ok: true, settings: writeSettings(payload) });
+      return;
+    }
+  }
+
   if (urlPath.startsWith('/api/applications')) {
     if (req.headers['x-owner-pin'] !== getOwnerPin()) {
       sendJson(res, 401, { ok: false, error: 'Unauthorized' });
@@ -94,6 +151,27 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && urlPath === '/api/applications') {
       sendJson(res, 200, { ok: true, applications: readApplications() });
+      return;
+    }
+
+    if (req.method === 'POST' && urlPath.endsWith('/approve')) {
+      try {
+        const targetId = decodeURIComponent(
+          urlPath.replace('/api/applications/', '').replace(/\/approve$/, '')
+        );
+        const out = await approveUtrPayment(targetId);
+        sendJson(res, 200, { ok: true, ...out });
+      } catch (err) {
+        sendJson(res, err.statusCode || 500, { ok: false, error: err.message });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && urlPath.endsWith('/reject')) {
+      const targetId = decodeURIComponent(
+        urlPath.replace('/api/applications/', '').replace(/\/reject$/, '')
+      );
+      sendJson(res, 200, { ok: true, applications: rejectUtrPayment(targetId) });
       return;
     }
 
