@@ -4,32 +4,32 @@
   xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
 >
   <url>
-    <loc>https://limwhites.com/</loc>
+    <loc>https://limwhites.github.io/LIMWHITES/</loc>
     <lastmod>2026-11-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://limwhites.com/images/hero-vault.jpg</image:loc>
+      <image:loc>https://limwhites.github.io/LIMWHITES/images/hero-vault.jpg</image:loc>
       <image:title>LIM WHITES x BAPE Vault Archive 09</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://limwhites.com/images/hoodie-1.jpg</image:loc>
+      <image:loc>https://limwhites.github.io/LIMWHITES/images/hoodie-1.jpg</image:loc>
       <image:title>LIM WHITES x BAPE Navy Waffle Camo Shark Zip Hoodie</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://limwhites.com/images/hoodie-2.jpg</image:loc>
+      <image:loc>https://limwhites.github.io/LIMWHITES/images/hoodie-2.jpg</image:loc>
       <image:title>LIM WHITES x BAPE Crimson Split 1st Camo Shark Hoodie</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://limwhites.com/images/hoodie-3.jpg</image:loc>
+      <image:loc>https://limwhites.github.io/LIMWHITES/images/hoodie-3.jpg</image:loc>
       <image:title>LIM WHITES x BAPE Heather Grey X-Crest Zip Hoodie</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://limwhites.com/images/hoodie-4.jpg</image:loc>
+      <image:loc>https://limwhites.github.io/LIMWHITES/images/hoodie-4.jpg</image:loc>
       <image:title>LIM WHITES x BAPE Multi-Camo Pop Shark Zip Hoodie</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://limwhites.com/images/hoodie-5.jpg</image:loc>
+      <image:loc>https://limwhites.github.io/LIMWHITES/images/hoodie-5.jpg</image:loc>
       <image:title>LIM WHITES x BAPE Dual Split Purple-Gold Shark Hoodie</image:title>
     </image:image>
   </url>
