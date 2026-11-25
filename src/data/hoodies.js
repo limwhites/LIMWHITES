@@ -1,0 +1,171 @@
+export const VIP_APPLICATION_FEE = 3000;
+export const STOCK_PER_HOODIE = 9;
+export const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', 'XXL'];
+
+export const SIZE_DESCRIPTIONS = {
+  S: 'Small • Chest 42" • Standard Fit',
+  M: 'Medium • Chest 44" • Tailored Boxy',
+  L: 'Large • Chest 46" • Archive Drop Fit',
+  XL: 'Extra Large • Chest 48" • Oversized Fit',
+  XXL: 'Double XL • Chest 50" • Heavyweight Boxy',
+};
+
+export const HOODIES = [
+  {
+    id: 'lw-bape-01',
+    sku: 'LW-BP-001',
+    name: 'LIM WHITES × BAPE® NAVY WAFFLE CAMO SHARK ZIP',
+    shortName: 'NAVY WAFFLE CAMO SHARK',
+    category: 'Shark Zip',
+    colorway: 'Midnight Navy / Cobalt Waffle Knit',
+    accentHex: '#1E3A8A',
+    stock: 9,
+    forSale: false,
+    image: '/images/hoodie-1.jpg',
+    editionTag: 'ARCHIVE EDITION 01/05',
+    serialRange: 'SERIAL #01/09 – #09/09',
+    gsm: '560 GSM Textured Waffle-Knit Camo',
+    description:
+      'Architectural midnight-navy and cobalt waffle-knit camo full-zip shark hoodie featuring bold varsity applique lettering on the hood and heavyweight structured cuffs.',
+    highlights: [
+      'Strictly 09 numbered units produced worldwide — zero restocks',
+      'Heavyweight 560 GSM 3D waffle-knit camo cotton construction',
+      'Full-zip closure extending cleanly over the crown of the hood',
+      'Authenticated with embedded NFC provenance chip & LIM WHITES vault seal',
+    ],
+    sizePrices: {
+      S: 35000,
+      M: 37500,
+      L: 40000,
+      XL: 42500,
+      XXL: 45000,
+    },
+  },
+  {
+    id: 'lw-bape-02',
+    sku: 'LW-BP-002',
+    name: 'LIM WHITES × BAPE® CRIMSON SPLIT 1ST CAMO SHARK',
+    shortName: 'CRIMSON SPLIT 1ST CAMO',
+    category: 'Split Camo',
+    colorway: 'Crimson Red / Olive 1st Camo',
+    accentHex: '#DC2626',
+    stock: 9,
+    forSale: false,
+    image: '/images/hoodie-2.jpg',
+    editionTag: 'ARCHIVE EDITION 02/05',
+    serialRange: 'SERIAL #01/09 – #09/09',
+    gsm: '520 GSM Brushed Heavyweight French Terry',
+    description:
+      'High-contrast crimson red heavyweight fleece anchored by an asymmetric olive 1st Camo kangaroo pocket and dual-panel split hood geometry.',
+    highlights: [
+      'Strictly 09 numbered units worldwide — VIP early access only',
+      'Contrast 1st Camo front pocket & split hood construction',
+      'Double-needle reinforced athletic cuffs and full metallic zip',
+      'Includes serialized anodized aluminum LIM WHITES authenticity card',
+    ],
+    sizePrices: {
+      S: 35500,
+      M: 38000,
+      L: 40500,
+      XL: 43000,
+      XXL: 45000,
+    },
+  },
+  {
+    id: 'lw-bape-03',
+    sku: 'LW-BP-003',
+    name: 'LIM WHITES × BAPE® HEATHER GREY X-CREST ZIP',
+    shortName: 'HEATHER GREY X-CREST',
+    category: 'Archive Crest',
+    colorway: 'Heather Grey / Violet Camo & Volt',
+    accentHex: '#7C3AED',
+    stock: 9,
+    forSale: false,
+    image: '/images/hoodie-3.jpg',
+    editionTag: 'ARCHIVE EDITION 03/05',
+    serialRange: 'SERIAL #01/09 – #09/09',
+    gsm: '540 GSM Loopback Atelier Fleece',
+    description:
+      'Clean heather grey heavyweight loopback zip hoodie contrasted with a purple camo split hood panel, bold volt-gold crest embroidery, and collector-grade trim.',
+    highlights: [
+      'Limited vault allocation: only 09 pieces across all sizes',
+      'Violet camo split hood paired with crisp heather grey fleece',
+      'High-density embroidered volt chest crest & custom sleeve motif',
+      'Individually inspected & certified by LIM WHITES Trust Authority',
+    ],
+    sizePrices: {
+      S: 35000,
+      M: 37000,
+      L: 39500,
+      XL: 42000,
+      XXL: 44500,
+    },
+  },
+  {
+    id: 'lw-bape-04',
+    sku: 'LW-BP-004',
+    name: 'LIM WHITES × BAPE® MULTI-CAMO POP SHARK ZIP',
+    shortName: 'MULTI-CAMO POP SHARK',
+    category: 'Shark Zip',
+    colorway: 'Jet Black / Sky Blue, Pink & Citron',
+    accentHex: '#0EA5E9',
+    stock: 9,
+    forSale: false,
+    image: '/images/hoodie-4.jpg',
+    editionTag: 'ARCHIVE EDITION 04/05',
+    serialRange: 'SERIAL #01/09 – #09/09',
+    gsm: '530 GSM Pigment-Printed Heavy Terry',
+    description:
+      'Gallery-edition jet-black fleece layered in high-saturation sky-blue, pastel-pink, and citron multi-camo print with crisp black rib-knit waist and cuffs.',
+    highlights: [
+      'Strictly 09 units — Not For General Sale on any retail platform',
+      'Multi-layer archival screen print over dense 530 GSM black terry',
+      'Oversized varsity hood patches with reinforced heavy silver zipper',
+      'Delivered in hard-shell magnetic LIM WHITES collector vault box',
+    ],
+    sizePrices: {
+      S: 36000,
+      M: 38500,
+      L: 41000,
+      XL: 43000,
+      XXL: 45000,
+    },
+  },
+  {
+    id: 'lw-bape-05',
+    sku: 'LW-BP-005',
+    name: 'LIM WHITES × BAPE® DUAL SPLIT PURPLE-GOLD SHARK',
+    shortName: 'DUAL SPLIT PURPLE-GOLD',
+    category: 'Split Camo',
+    colorway: 'Royal Violet Camo / Desert Tan Camo',
+    accentHex: '#9333EA',
+    stock: 9,
+    forSale: false,
+    image: '/images/hoodie-5.jpg',
+    editionTag: 'ARCHIVE EDITION 05/05',
+    serialRange: 'SERIAL #01/09 – #09/09',
+    gsm: '550 GSM Dual-Cut Archive Fleece',
+    description:
+      'Precision 50/50 split-seam construction uniting royal purple camo on the right body with classic desert-tan 1st Camo on the left from rib hem to shark crown.',
+    highlights: [
+      'Precision dual-cut split construction — 09 units strictly capped',
+      'Aligned split kangaroo pocket & asymmetrical hem ribbing',
+      'Custom metallic hardware & laser-etched serial vault badge',
+      'Priority VIP Early Access allocation with verified collector registry',
+    ],
+    sizePrices: {
+      S: 36500,
+      M: 39000,
+      L: 41500,
+      XL: 43500,
+      XXL: 45000,
+    },
+  },
+];
+
+export const formatINR = (amount) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(amount);

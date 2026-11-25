@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Replace limwhites.com with your live domain before deploying
+Sitemap: https://limwhites.com/sitemap.xml
